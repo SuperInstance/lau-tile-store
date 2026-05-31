@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "SQLite-backed tile persistence layer for agent systems"
 license = "MIT"
+repository = "https://github.com/SuperInstance/lau-tile-store"
 
 [dependencies]
 rusqlite = { version = "0.31", features = ["bundled"] }
