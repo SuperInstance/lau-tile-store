@@ -1,65 +1,88 @@
 # lau-tile-store
 
-SQLite-backed tile persistence layer for agent systems. System-agnostic, synchronous, and fast.
-
-## Overview
-
-A **tile** is the fundamental unit of agent cognition — an observation, thought, action, artifact, etc. This crate provides durable SQLite storage for tiles with querying, hierarchy traversal, and import/export.
-
-## Quick Start
+**THE memory system.** SQLite tile CRUD in 10 lines. Tiles ARE memory — no separate system needed.
 
 ```rust
 use lau_tile_store::*;
 
-let store = TileStore::open("tiles.db").unwrap();
+let store = TileStore::open("tiles.db")?;
 
-// Create and store a tile
-let obs = StorableTile::new(TileType::Observation, "User logged in")
-    .with_room("session-1");
-store.store(&obs).unwrap();
+let obs = StorableTile::new(TileType::Observation, "User logged in").with_room("session-1");
+store.store(&obs)?;
 
-// Create a child thought
 let thought = obs.child(TileType::Thought, "Should I greet them?");
-store.store(&thought).unwrap();
+store.store(&thought)?;
 
-// Query tiles
-let active = store.query(
-    TileQuery::new()
-        .in_room("session-1")
-        .with_status(TileStatus::Active)
-        .newest_first()
-        .limit(10)
-).unwrap();
-
-// Walk hierarchy
-let ancestors = store.ancestors(&thought.id).unwrap();
-let descendants = store.descendants(&obs.id).unwrap();
-
-// Stats
-let stats = store.stats().unwrap();
-println!("{} tiles in {} rooms", stats.total_tiles, stats.total_rooms);
+let active = store.query(TileQuery::new().in_room("session-1").newest_first().limit(10))?;
 ```
 
-## Tile Types
+## Query Examples
 
-`Observation`, `Action`, `Thought`, `Delegation`, `Escalation`, `Artifact`, `System`, `Onboarding`, `StandDown`
+```rust
+// All tiles in a room
+store.room_tiles("engineering", 50)?;
 
-## Tile Statuses
+// Active observations since a timestamp
+store.query(TileQuery::new().of_type(TileType::Observation).with_status(TileStatus::Active).since(1700000000))?;
 
-`Active`, `Complete`, `Deadband`, `Escalated`, `Archived`, `Orphaned`
+// Content search
+store.query(TileQuery::new().containing("deploy").limit(20))?;
+
+// Hierarchy traversal
+store.children_of(&parent_id)?;
+store.ancestors(&child_id)?;
+store.descendants(&root_id)?;   // recursive
+```
+
+## Export / Import Roundtrip
+
+```rust
+let json = store.export_json(TileQuery::new().in_room("session-1"))?;
+let count = store.import_json(&json)?;
+// count tiles migrated, zero data loss
+```
+
+## Stats
+
+```rust
+let stats = store.stats()?;
+println!("{} tiles in {} rooms, {:.1} KB on disk",
+    stats.total_tiles, stats.total_rooms, stats.db_size_bytes as f64 / 1024.0);
+```
 
 ## Configuration
 
 ```rust
-// Default (WAL mode, 5s busy timeout)
-TileStore::open("tiles.db").unwrap();
+// Default: WAL mode, 5s busy timeout
+TileStore::open("tiles.db")?;
 
-// High performance
-TileStore::open_with_config("tiles.db", StoreConfig::high_performance()).unwrap();
+// High performance: 100MB journal, 8GB cache
+TileStore::open_with_config("tiles.db", StoreConfig::high_performance())?;
 
-// Minimal (no WAL, 1s timeout)
-TileStore::open_with_config("tiles.db", StoreConfig::minimal()).unwrap();
+// Minimal: no WAL, 1s timeout
+TileStore::open_with_config("tiles.db", StoreConfig::minimal())?;
+
+// In-memory (tests)
+TileStore::open_memory()?;
 ```
+
+## Tile Types & Statuses
+
+**Types:** Observation · Action · Thought · Delegation · Escalation · Artifact · System · Onboarding · StandDown
+
+**Statuses:** Active · Complete · Deadband · Escalated · Archived · Orphaned
+
+## Tests
+
+**60 integration tests** — full CRUD, hierarchy traversal, query filtering, export/import roundtrip, stats, concurrent access.
+
+## Ecosystem
+
+- [lau-shell-kernel] — bare construct (includes in-memory TileStore)
+- [lau-provider] — LLM provider abstraction
+- **[lau-tile-store]** (this) — SQLite-backed tile persistence
+- [lau-git-agent] — repo-as-agent
+- [lau-git-render] — multi-format rendering
 
 ## License
 
